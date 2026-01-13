@@ -333,7 +333,7 @@ async def test(token) -> None:
 
 
 if __name__ == '__main__':
-  TOKEN = "7741532244:AAF99rCUF6ZPUnVqrlQSQm8MTIf8UVkORGc"
+  TOKEN = "TOKEN"
   POLL_TRACKING_FILE = "./poll_tracking.json"
   QUESTIONS_CSV_FILE = "./questions.csv"
 
