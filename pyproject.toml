@@ -1,0 +1,58 @@
+[build-system]
+  requires = ["setuptools"]
+  build-backend = "setuptools.build_meta"
+
+[project]
+  name = "qrzbot"
+  readme = "README.md"
+  description = "QRZ bot for ham radio operators."
+  license = "BSD-2-Clause"
+  authors = [
+    { name = "Fred C." },
+  ]
+  classifiers = [
+    "Intended Audience :: Telecommunications",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",
+  ]
+  requires-python = ">=3.10"
+  dependencies = [
+    "aiosqlite",
+    "build",
+    "httpx",
+    "python-telegram-bot",
+    "python-telegram-bot[job-queue]",
+    "qrzlib",
+    "setuptools",
+    "toml",
+    "tqdm",
+  ]
+  dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "flake8",
+    "httpx",
+    "ipdb",
+    "ipython",
+    "isort",
+    "mypy",
+    "pre-commit",
+    "pylint",
+]
+
+[project.urls]
+  Documentation = "https://github.com/0x9900/qrzbot/"
+  Source = "https://github.com/0x9900/qrzbot"
+  Tracker = "https://github.com/0x9900/qrzbot/issues"
+
+[project.scripts]
+  qrzbot = "qrzbot:main"
+  gen_qrzbot_db = "qrzbot.gen_qrzbot_db:main"
+
+[tool.setuptools.dynamic]
+  version = { attr = "qrzbot._qrzbot.__version__" }

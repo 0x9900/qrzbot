@@ -1,0 +1,6 @@
+
+token = "<telegram-token>"
+developer_id = "<telegram-developer_id>"
+qrz_call = "<call>"
+qrz_key = "<qrz-api-ley>"
+dbname = "<home>/.local/qrzbot.sqlite"
