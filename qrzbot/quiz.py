@@ -245,7 +245,7 @@ async def quiz_status(update: Update, context: CallbackContext) -> None:
     if not os.path.exists(QUESTIONS_CSV_FILE):
       await bot.send_message(
         chat_id=chat_id,
-        text="Quiz file not found. An admin can create a sample file using /createcsv command."
+        text="Quiz file not found."
       )
       return
 
