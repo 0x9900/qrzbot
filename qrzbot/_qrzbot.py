@@ -369,6 +369,13 @@ async def whois(update: Update, context: CallbackContext) -> int:
   chat_id = get_effective_chat(update).id
   message = get_message(update)
 
+  text = message.text.strip() if message.text else ""
+  result = re.match(r'^/whois\s+(\w+)$', text, re.IGNORECASE)
+
+  if result:
+    callsign = result.group(1).upper()
+    return await process_callsign(update, context, callsign)
+
   job = context.job_queue.run_once(
     whois_send_timeout_message,
     when=30,
@@ -376,12 +383,6 @@ async def whois(update: Update, context: CallbackContext) -> int:
     name=f"whois_timeout_{chat_id}"
   )
   context.user_data['timeout_job'] = job
-
-  text = message.text.strip() if message.text else ""
-  result = re.match(r'^/whois\s+(\w+)$', text, re.IGNORECASE)
-  if result:
-    callsign = result.group(1).upper()
-    return await process_callsign(update, context, callsign)
 
   # Otherwise, ask the user for a callsign
   await bot.send_message(chat_id=chat_id, text="<b>Please enter a callsign:</b> (30s timeout)",
