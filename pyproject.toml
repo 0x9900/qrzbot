@@ -27,6 +27,7 @@
     "python-telegram-bot",
     "python-telegram-bot[job-queue]",
     "qrzlib",
+    "requests",
     "setuptools",
     "toml",
     "tqdm",
@@ -56,3 +57,6 @@ dev = [
 
 [tool.setuptools.dynamic]
   version = { attr = "qrzbot._qrzbot.__version__" }
+
+[tool.setuptools]
+    packages = ["qrzbot"]

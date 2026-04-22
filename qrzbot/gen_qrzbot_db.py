@@ -19,7 +19,7 @@ from qrzbot import Config
 
 DETECT_TYPES = sqlite3.PARSE_DECLTYPES
 
-BUFSIZE = 1024
+BUFSIZE = 1024 * 8
 
 SQL_TABLES = """
 PRAGMA synchronous = EXTRA;
@@ -142,12 +142,14 @@ def insert_pota(dbname, filename):
     reader = csv.DictReader(fd)
     with connect_db(dbname) as db:
       entries = []
-      for idx, row in enumerate(reader):
+      for idx, row in enumerate(reader, 1):
         entries.append(row)
         if idx % BUFSIZE == 0:
+          logging.info('Insert %d records', idx)
           db.executemany(INSERT_PARK, entries)
           entries.clear()
       if entries:
+        logging.info('Insert %d records', len(entries))
         db.executemany(INSERT_PARK, entries)
 
 
@@ -159,12 +161,14 @@ def insert_summit(dbname, filename):
     reader = csv.DictReader(fd)
     with connect_db(dbname) as db:
       entries = []
-      for idx, row in enumerate(reader):
+      for idx, row in enumerate(reader, 1):
         entries.append(row)
         if idx % BUFSIZE == 0:
+          logging.info('Insert %d records', idx)
           db.executemany(INSERT_SUMMIT, entries)
           entries.clear()
       if entries:
+        logging.info('Insert %d records', len(entries))
         db.executemany(INSERT_SUMMIT, entries)
 
 
@@ -175,12 +179,14 @@ def insert_states(dbname, filename):
     reader = csv.DictReader(fd)
     with connect_db(dbname) as db:
       entries = []
-      for idx, rec in enumerate(reader):
+      for idx, rec in enumerate(reader, 1):
         entries.append(rec)
         if idx % BUFSIZE == 0:
+          logging.info('Insert %d records', idx)
           db.executemany(INSERT_STATE, entries)
           entries.clear()
       if entries:
+        logging.info('Insert %d records', len(entries))
         db.executemany(INSERT_STATE, entries)
 
 
