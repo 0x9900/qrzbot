@@ -12,12 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from datetime import time as dttime
 from datetime import timezone
-from pathlib import Path
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 import aiosqlite
 import httpx
-import toml
 from qrzlib import QRZ
 from telegram import BotCommand, Update
 from telegram.constants import ParseMode
@@ -25,6 +23,7 @@ from telegram.ext import (Application, CallbackContext, CommandHandler,
                           ContextTypes, ConversationHandler, ExtBot,
                           MessageHandler, filters)
 
+from .config import Config
 from .quiz import quiz_status, reset_quiz, send_quiz
 from .tools import get_effective_chat, get_effective_user, get_message
 
@@ -145,44 +144,6 @@ class CallInfo:
     if self.latlon:
       return self.latlon[1]
     return 0.0
-
-
-@dataclass()
-class Config:
-  # pylint: disable=too-few-public-methods
-  """Holds configuration informations"""
-
-  class Error(Exception):
-    pass
-
-  token: str = ''
-  developer_id: int = 0
-  qrz_call: str = ''
-  qrz_key: str = ''
-  dbname: str = ''
-
-  @classmethod
-  def load(cls) -> None:
-    """load token and developer_id from the config file"""
-    for config_file in CONFIG_FILES:
-      config_path = Path(config_file).expanduser()
-      if config_path.exists():
-        break
-    else:
-      raise FileNotFoundError('Configuration file missing')
-
-    try:
-      with config_path.open('r', encoding="utf-8") as cfd:
-        _config = toml.load(cfd)
-    except ValueError as err:
-      raise Config.Error(f'Configuration error {err}')
-
-    # Update instance attributes
-    for key, value in _config.items():
-      if hasattr(cls, key):
-        setattr(cls, key, value)  # Assign values dynamically
-      else:
-        LOG.warning('Unknown config attribute: "%s"', key)
 
 
 def esc_md(text: str) -> str:
@@ -400,7 +361,7 @@ async def whois_send_timeout_message(context: ContextTypes.DEFAULT_TYPE):
 
 async def whois_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
   # Cancel timeout job
-  if 'timeout_job' in context.user_data:
+  if context.user_data and 'timeout_job' in context.user_data:
     context.user_data['timeout_job'].schedule_removal()
 
   await update.message.reply_text("Cancelled.")
@@ -409,7 +370,7 @@ async def whois_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def received_callsign(update: Update, context: CallbackContext) -> int:
   """Handles the callsign entered after /whois without argument."""
-  if 'timeout_job' in context.user_data:
+  if context.user_data and 'timeout_job' in context.user_data:
     context.user_data['timeout_job'].schedule_removal()
 
   message = get_message(update)
@@ -719,9 +680,15 @@ async def set_commands(application: Application) -> None:
 
 def main() -> None:
   LOG.info('qrzbot version: %s', __version__)
-  Config.load()
+  try:
+    Config.load()
+  except FileNotFoundError as err:
+    LOG.error(err)
+    sys.exit(os.EX_CONFIG)
+
   if not (Config.dbname and os.path.exists(Config.dbname)):
-    LOG.error('%s not found', Config.dbname)
+    LOG.error('%s not found. Use the command "gen_qrzbot_db" to generate the database',
+              Config.dbname)
     sys.exit(os.EX_DATAERR)
 
   application = Application.builder().token(Config.token).build()

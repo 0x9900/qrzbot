@@ -1,3 +1,6 @@
+#
+# the developer_id the telegram user id where the errors should be sent.
+#
 
 token = "<telegram-token>"
 developer_id = "<telegram-developer_id>"

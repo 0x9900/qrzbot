@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from telegram import BotCommand, Poll, Update
 from telegram.ext import Application, CallbackContext, CommandHandler
 
+from .config import Config
 from .tools import get_effective_chat, get_effective_user
 
 POLL_TRACKING_FILE = "/var/tmp/poll_tracking.json"
@@ -94,6 +95,8 @@ async def is_admin(update: Update, context: CallbackContext) -> bool:
   """Check if the user is an admin in the chat."""
   chat_id = get_effective_chat(update).id
   user_id = get_effective_user(update).id
+  if user_id == Config.developer_id:
+    return True
 
   try:
     chat_member = await context.bot.get_chat_member(chat_id, user_id)
