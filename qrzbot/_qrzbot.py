@@ -27,7 +27,7 @@ from .config import Config
 from .quiz import quiz_status, reset_quiz, send_quiz
 from .tools import get_effective_chat, get_effective_user, get_message
 
-__version__ = '0.2.4'
+__version__ = '0.2.5'
 
 P = ParamSpec("P")
 R = TypeVar("R")
