@@ -3,6 +3,7 @@
 
 import asyncio
 import csv
+import html
 import json
 import logging
 import os
@@ -10,10 +11,12 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 from telegram import BotCommand, Poll, Update
+from telegram.constants import ParseMode
 from telegram.ext import Application, CallbackContext, CommandHandler
 
 from .config import Config
 from .tools import get_effective_chat, get_effective_user
+
 
 POLL_TRACKING_FILE = "/var/tmp/poll_tracking.json"
 QUESTIONS_CSV_FILE = "/var/tmp/questions.csv"
@@ -61,33 +64,30 @@ class QuizManager:
       return self.questions[question_index], question_index
 
     tracking_data = load_tracking_data()
-    last_index = -1
-    if "chats" in tracking_data and chatid in tracking_data["chats"]:
-      last_index = tracking_data["chats"][chatid].get("last_question_index", -1)
-
-    next_index = (last_index + 1) % len(self.questions)
-    return self.questions[next_index], next_index
+    last_index = tracking_data["chats"][chatid].get("question_index", -1)
+    new_index = (last_index + 1) % len(self.questions)
+    return self.questions[new_index], new_index
 
 
 def load_tracking_data() -> Dict[str, Any]:
+  tracking_data: dict[str, dict] = {"chats": {}}
   if os.path.exists(POLL_TRACKING_FILE):
     try:
       with open(POLL_TRACKING_FILE, 'r', encoding='utf=8') as file:
         data = json.load(file)
         # Ensure the data has the expected structure
         if "chats" not in data:
-          data["chats"] = {}
+          data = tracking_data
         return data
     except Exception as err:
       logging.error("Error loading tracking data: %s", err)
-      return {"chats": {}}
-  return {"chats": {}}
+  return tracking_data
 
 
 # Save tracking data
 def save_tracking_data(data: Dict[str, Any]) -> None:
   with open(POLL_TRACKING_FILE, 'w', encoding='utf=8') as file:
-    json.dump(data, file)
+    json.dump(data, file, indent=2)
 
 
 # Check if user is an admin in the chat
@@ -119,7 +119,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     '/resetquiz - Reset the quiz progress\n'
     '/quizstatus - Check quiz status'
   )
-  bot.send_message(chat_id=chat_id, text=text)
+  await bot.send_message(chat_id=chat_id, text=text)
 
 
 async def send_quiz(update: Update, context: CallbackContext) -> None:
@@ -142,16 +142,14 @@ async def send_quiz(update: Update, context: CallbackContext) -> None:
 
     # Load tracking data - ensure the "chats" key exists
     tracking_data = load_tracking_data()
-    if "chats" not in tracking_data:
-      tracking_data["chats"] = {}
 
     # Initialize chat data if not exists
     if chatid not in tracking_data["chats"]:
       tracking_data["chats"][chatid] = {
-        "last_question_index": -1,
-        "questions_sent": 0,
+        "question_index": 0,
         "admin_id": user_id  # First user to use quiz becomes admin for simplicity
       }
+      save_tracking_data(tracking_data)
 
     try:
       quiz_manager = QuizManager(QUESTIONS_CSV_FILE)
@@ -163,13 +161,17 @@ async def send_quiz(update: Update, context: CallbackContext) -> None:
       return
 
     try:
-      question_data, next_index = quiz_manager.get_question(chatid)
+      question_data, question_index = quiz_manager.get_question(chatid)
     except ValueError as err:
       await bot.send_message(chat_id=chat_id, text=f"Error getting question: {str(err)}")
       return
 
+    # Update tracking data
+    tracking_data["chats"][chatid]["question_index"] = question_index
+    save_tracking_data(tracking_data)
+
     explanation = (
-      f"Question {tracking_data['chats'][chatid]['questions_sent'] + 1} "
+      f"Question {tracking_data['chats'][chatid]['question_index'] + 1} "
       f"of {len(quiz_manager.questions)}"
     )
     # Send the quiz and pin it
@@ -186,13 +188,6 @@ async def send_quiz(update: Update, context: CallbackContext) -> None:
       await bot.pin_chat_message(chat_id=chat_id, message_id=message.message_id)
     except Exception as err:
       logging.warning("Poll created but could't pin it: %s", err)
-
-    # Update tracking data
-    tracking_data["chats"][chatid]["last_question_index"] = next_index
-    tracking_data["chats"][chatid]["questions_sent"] += 1
-    tracking_data["chats"][chatid]["last_poll_id"] = message.poll.id
-    tracking_data["chats"][chatid]["last_message_id"] = message.message_id
-    save_tracking_data(tracking_data)
 
   except Exception as err:
     tb = traceback.format_exc()
@@ -221,8 +216,7 @@ async def reset_quiz(update: Update, context: CallbackContext) -> None:
       tracking_data["chats"] = {}
 
     if chatid in tracking_data["chats"]:
-      tracking_data["chats"][chatid]["last_question_index"] = -1
-      tracking_data["chats"][chatid]["questions_sent"] = 0
+      tracking_data["chats"][chatid]["question_index"] = -1
       save_tracking_data(tracking_data)
       await bot.send_message(
         chat_id=chat_id, text="Quiz progress has been reset. Use /quiz to start fresh."
@@ -264,22 +258,19 @@ async def quiz_status(update: Update, context: CallbackContext) -> None:
         return
 
       total_questions = len(quiz_manager.questions)
-      questions_sent = tracking_data["chats"][chatid]["questions_sent"]
-      last_index = tracking_data["chats"][chatid]["last_question_index"]
-
-      current_cycle = (questions_sent // total_questions) + 1
-      current_position = (last_index + 1) % total_questions
-      if current_position == 0:
-        current_position = total_questions
+      try:
+        question_index = tracking_data["chats"][chatid]["question_index"]
+        question = quiz_manager.questions[question_index]['question']
+      except KeyError:
+        question_index = 0
+        question = 'Error'
 
       await bot.send_message(chat_id, text=(
         f"Quiz Status:\n"
-        f"- Questions sent: {questions_sent}\n"
-        f"- Total questions: {total_questions}\n"
-        f"- Current position: Question {current_position} of {total_questions}\n"
-        f"- Current cycle: {current_cycle}\n"
-        f"- Next question will be: #{(last_index + 1) % total_questions + 1}"
-      ))
+        f"○ <b>Total questions:</b> {total_questions}\n"
+        f"○ <b>Index:</b> {question_index}\n"
+        f"○ <b>Last question:</b>\n{html.escape(question)}\n"
+      ), parse_mode=ParseMode.HTML)
     else:
       await bot.send_message(chat_id=chat_id, text="No quiz has been started in this chat yet.")
   except Exception as err:
@@ -336,8 +327,9 @@ async def test(token) -> None:
 
 
 if __name__ == '__main__':
-  TOKEN = "TOKEN"
+  Config.load()
+  TOKEN = Config.token
   POLL_TRACKING_FILE = "./poll_tracking.json"
-  QUESTIONS_CSV_FILE = "./questions.csv"
+  QUESTIONS_CSV_FILE = "misc/gen-extra-questions.csv"
 
   asyncio.run(test(TOKEN))

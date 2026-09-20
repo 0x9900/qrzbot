@@ -25,7 +25,7 @@ from telegram.ext import (Application, CallbackContext, CommandHandler,
 
 from .config import Config
 from .quiz import quiz_status, reset_quiz, send_quiz
-from .tools import get_effective_chat, get_effective_user, get_message
+from .tools import esc_md, get_effective_chat, get_effective_user, get_message
 
 __version__ = '0.2.5'
 
@@ -144,12 +144,6 @@ class CallInfo:
     if self.latlon:
       return self.latlon[1]
     return 0.0
-
-
-def esc_md(text: str) -> str:
-  # Escape all reserved characters except those inside code blocks or links
-  reserved_chars = r'_*[]()~`>#+-=|{}.!\\'
-  return re.sub(f'([{re.escape(reserved_chars)}])', r'\\\1', str(text))
 
 
 @functools.lru_cache(maxsize=64)

@@ -5,6 +5,7 @@
 #
 # Distributed under terms of the BSD 3-Clause license.
 
+import re
 from typing import cast
 
 from telegram import Chat, Message, Update, User
@@ -26,3 +27,9 @@ def get_message(update: Update) -> Message:
   if update.message is None:
     raise ValueError('No message object set')
   return cast(Message, update.message)
+
+
+def esc_md(text: str) -> str:
+  # Escape all reserved characters except those inside code blocks or links
+  reserved_chars = r'_*[]()~`>#+-=|{}.!\\'
+  return re.sub(f'([{re.escape(reserved_chars)}])', r'\\\1', str(text))
