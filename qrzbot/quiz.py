@@ -7,19 +7,20 @@ import html
 import json
 import logging
 import os
+import re
 import traceback
 from typing import Any, Dict, List, Optional
 
 from telegram import BotCommand, Poll, Update
 from telegram.constants import ParseMode
-from telegram.ext import Application, CallbackContext, CommandHandler
+from telegram.ext import (Application, CallbackContext, CommandHandler,
+                          ContextTypes, ConversationHandler, MessageHandler,
+                          filters)
 
 from .config import Config
 from .tools import get_effective_chat, get_effective_user
 
-
-POLL_TRACKING_FILE = "/var/tmp/poll_tracking.json"
-QUESTIONS_CSV_FILE = "/var/tmp/questions.csv"
+CONFIRM = 1
 
 logging.basicConfig(
   format="%(asctime)s - %(name)s[%(process)d]:%(lineno)d - %(levelname)s - %(message)s",
@@ -71,9 +72,9 @@ class QuizManager:
 
 def load_tracking_data() -> Dict[str, Any]:
   tracking_data: dict[str, dict] = {"chats": {}}
-  if os.path.exists(POLL_TRACKING_FILE):
+  if os.path.exists(Config.poll_tracking_file):
     try:
-      with open(POLL_TRACKING_FILE, 'r', encoding='utf=8') as file:
+      with open(Config.poll_tracking_file, 'r', encoding='utf=8') as file:
         data = json.load(file)
         # Ensure the data has the expected structure
         if "chats" not in data:
@@ -86,7 +87,7 @@ def load_tracking_data() -> Dict[str, Any]:
 
 # Save tracking data
 def save_tracking_data(data: Dict[str, Any]) -> None:
-  with open(POLL_TRACKING_FILE, 'w', encoding='utf=8') as file:
+  with open(Config.poll_tracking_file, 'w', encoding='utf=8') as file:
     json.dump(data, file, indent=2)
 
 
@@ -152,7 +153,7 @@ async def send_quiz(update: Update, context: CallbackContext) -> None:
       save_tracking_data(tracking_data)
 
     try:
-      quiz_manager = QuizManager(QUESTIONS_CSV_FILE)
+      quiz_manager = QuizManager(Config.questions_file)
       if not quiz_manager.questions:
         raise ValueError("No questions found")
     except (IOError, ValueError) as err:
@@ -239,7 +240,7 @@ async def quiz_status(update: Update, context: CallbackContext) -> None:
     tracking_data = load_tracking_data()
 
     # Check if CSV file exists
-    if not os.path.exists(QUESTIONS_CSV_FILE):
+    if not os.path.exists(Config.questions_file):
       await bot.send_message(
         chat_id=chat_id,
         text="Quiz file not found."
@@ -251,7 +252,7 @@ async def quiz_status(update: Update, context: CallbackContext) -> None:
       tracking_data["chats"] = {}
 
     if chatid in tracking_data["chats"]:
-      quiz_manager = QuizManager(QUESTIONS_CSV_FILE)
+      quiz_manager = QuizManager(Config.questions_file)
 
       if not quiz_manager.questions:
         await bot.send_message(chat_id=chat_id, text="No questions found in the CSV file.")
@@ -265,14 +266,21 @@ async def quiz_status(update: Update, context: CallbackContext) -> None:
         question_index = 0
         question = 'Error'
 
-      await bot.send_message(chat_id, text=(
-        f"Quiz Status:\n"
-        f"○ <b>Total questions:</b> {total_questions}\n"
-        f"○ <b>Index:</b> {question_index}\n"
-        f"○ <b>Last question:</b>\n{html.escape(question)}\n"
-      ), parse_mode=ParseMode.HTML)
+      if question_index < 0:
+        await bot.send_message(
+          chat_id, text="You haven't started the quiz. Use /quiz to start fresh"
+        )
+      else:
+        await bot.send_message(chat_id, text=(
+          f"Quiz Status:\n"
+          f"○ <b>Total Questions:</b> {total_questions}\n"
+          f"○ <b>Question Pool Index:</b> {question_index}\n"
+          f"○ <b>Last Question:</b>\n{html.escape(question)}\n"
+        ), parse_mode=ParseMode.HTML)
     else:
-      await bot.send_message(chat_id=chat_id, text="No quiz has been started in this chat yet.")
+      await bot.send_message(
+        chat_id=chat_id,
+        text="No quiz has been started in this chat. Use /quiz to start fresh")
   except Exception as err:
     tb = traceback.format_exc()
     logging.error("Error in quiz_status: %s\n%s", err, tb)
@@ -293,6 +301,35 @@ async def set_commands(application):
     logging.error("Error: %s", err)
 
 
+async def reset_confirmation(update: Update, _) -> int:
+  await update.message.reply_text("Are you sure? (yes/no)")
+  return CONFIRM
+
+
+async def reset_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+  await reset_quiz(update, context)
+  return ConversationHandler.END
+
+
+async def reset_denied(update: Update, _) -> int:
+  await update.message.reply_text("Cancelled.")
+  return ConversationHandler.END
+
+
+def reset_handler():
+  reset_dialog = ConversationHandler(
+    entry_points=[CommandHandler("resetquiz", reset_confirmation)],
+    states={
+      CONFIRM: [
+        MessageHandler(filters.Regex(re.compile(r"^yes$", re.IGNORECASE)), reset_confirmed),
+        MessageHandler(filters.Regex(re.compile(r"^no$", re.IGNORECASE)), reset_denied),
+      ],
+    },
+    fallbacks=[],
+  )
+  return reset_dialog
+
+
 async def test(token) -> None:
   """Start the bot."""
   application = Application.builder().token(token).build()
@@ -301,8 +338,8 @@ async def test(token) -> None:
   # Add command handlers
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CommandHandler("quiz", send_quiz))
-  application.add_handler(CommandHandler("resetquiz", reset_quiz))
   application.add_handler(CommandHandler("quizstatus", quiz_status))
+  application.add_handler(reset_handler())
 
   await application.initialize()
   await application.start()
@@ -329,7 +366,5 @@ async def test(token) -> None:
 if __name__ == '__main__':
   Config.load()
   TOKEN = Config.token
-  POLL_TRACKING_FILE = "./poll_tracking.json"
-  QUESTIONS_CSV_FILE = "misc/gen-extra-questions.csv"
 
   asyncio.run(test(TOKEN))

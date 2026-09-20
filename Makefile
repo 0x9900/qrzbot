@@ -21,7 +21,7 @@ help:
 clean:
 	rm -rf build/ dist/ *.egg-info/ __pycache__/ .mypy_cache/ .pylint.py
 
-all: pylint mypy pre-commit
+all: pre-commit pylint mypy
 
 # Pre-commit: Run pre-commit hooks
 pre-commit:

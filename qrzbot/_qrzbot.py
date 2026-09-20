@@ -24,10 +24,10 @@ from telegram.ext import (Application, CallbackContext, CommandHandler,
                           MessageHandler, filters)
 
 from .config import Config
-from .quiz import quiz_status, reset_quiz, send_quiz
+from .quiz import quiz_status, reset_handler, send_quiz
 from .tools import esc_md, get_effective_chat, get_effective_user, get_message
 
-__version__ = '0.2.6'
+__version__ = '0.2.7'
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -714,8 +714,8 @@ def main() -> None:
   application.add_handler(CommandHandler("summit", sota_summit))
   application.add_handler(CommandHandler("OhmsLaw", ohms))
   application.add_handler(CommandHandler("quiz", send_quiz))
-  application.add_handler(CommandHandler("resetquiz", reset_quiz))
   application.add_handler(CommandHandler("quizstatus", quiz_status))
+  application.add_handler(reset_handler())
 
   application.add_handler(MessageHandler(filters.COMMAND, log_command), group=-1)
 

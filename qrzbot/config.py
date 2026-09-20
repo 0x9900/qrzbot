@@ -6,11 +6,13 @@
 # Distributed under terms of the BSD 3-Clause license.
 
 import logging
-import toml
 from pathlib import Path
-from dataclasses import dataclass
+
+import toml
 
 CONFIG_FILES = ("qrzbot.toml", "~/.local/qrzbot.toml", "/etc/qrzbot.toml")
+POLL_TRACKING_FILE = "/var/tmp/poll_tracking.json"
+QUESTIONS_FILE_CSV = "/var/tmp/questions.csv"
 
 logging.basicConfig(
   format="%(asctime)s - %(name)s[%(process)d]:%(lineno)d - %(levelname)s - %(message)s",
@@ -20,7 +22,6 @@ logging.basicConfig(
 LOG = logging.getLogger(__name__)
 
 
-@dataclass()
 class Config:
   # pylint: disable=too-few-public-methods
   """Holds configuration informations"""
@@ -33,6 +34,11 @@ class Config:
   qrz_call: str = ''
   qrz_key: str = ''
   dbname: str = ''
+  poll_tracking_file: str = POLL_TRACKING_FILE
+  questions_file: str = QUESTIONS_FILE_CSV
+
+  def __new__(cls, *args, **kwargs):
+    raise TypeError(f'{cls.__name__} is a static class and cannot be instanciated')
 
   @classmethod
   def load(cls) -> None:
