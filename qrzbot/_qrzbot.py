@@ -27,7 +27,7 @@ from .config import Config
 from .quiz import quiz_status, reset_handler, send_quiz
 from .tools import esc_md, get_effective_chat, get_effective_user, get_message
 
-__version__ = '0.2.7'
+__version__ = '0.2.8'
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -320,36 +320,44 @@ async def format_callinfo(user: str, callsign: str, call_info: CallInfo) -> str:
 
 
 async def whois(update: Update, context: CallbackContext) -> int:
-  bot = context.bot
-  chat_id = get_effective_chat(update).id
-  message = get_message(update)
+  chat = update.effective_chat
+  message = update.effective_message
+  if chat is None or message is None:
+    return ConversationHandler.END
 
-  text = message.text.strip() if message.text else ""
+  chat_id = chat.id
+  text = (message.text or "").strip()
   result = re.match(r'^/whois\s+(\w+)$', text, re.IGNORECASE)
 
   if result:
     callsign = result.group(1).upper()
     return await process_callsign(update, context, callsign)
 
-  job = context.job_queue.run_once(
+  if context.job_queue is None:
+    return ConversationHandler.END
+
+  context.job_queue.run_once(
     whois_send_timeout_message,
     when=30,
-    data=chat_id,
-    name=f"whois_timeout_{chat_id}"
+    chat_id=chat_id,
+    name=f"whois_timeout_{chat_id}",
   )
-  context.user_data['timeout_job'] = job
 
-  # Otherwise, ask the user for a callsign
-  await bot.send_message(chat_id=chat_id, text="<b>Please enter a callsign:</b> (30s timeout)",
-                         parse_mode="HTML")
+  await context.bot.send_message(
+    chat_id=chat_id,
+    text="<b>Please enter a callsign:</b> (30s timeout)",
+    parse_mode="HTML",
+  )
   return ASK_CALLSIGN
 
 
-async def whois_send_timeout_message(context: ContextTypes.DEFAULT_TYPE):
-  chat_id = context.job.data
+async def whois_send_timeout_message(context: ContextTypes.DEFAULT_TYPE) -> None:
+  job = context.job
+  if job is None or job.chat_id is None:
+    return
   await context.bot.send_message(
-    chat_id=chat_id,
-    text="⏰ Whois lookup timed out after 30 seconds of inactivity."
+    chat_id=job.chat_id,
+    text="⏰ Whois lookup timed out after 30 seconds of inactivity.",
   )
 
 
@@ -358,23 +366,26 @@ async def whois_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
   if context.user_data and 'timeout_job' in context.user_data:
     context.user_data['timeout_job'].schedule_removal()
 
-  await update.message.reply_text("Cancelled.")
+  if update.message is not None:
+    await update.message.reply_text("Cancelled.")
   return ConversationHandler.END
 
 
 async def received_callsign(update: Update, context: CallbackContext) -> int:
   """Handles the callsign entered after /whois without argument."""
-  if context.user_data and 'timeout_job' in context.user_data:
-    context.user_data['timeout_job'].schedule_removal()
+  user_data = context.user_data
+  if user_data is not None:
+    job = user_data.pop('timeout_job', None)
+    if job is not None:
+      job.schedule_removal()
 
   message = get_message(update)
-
-  if not message:
+  if message is None:
     return ConversationHandler.END
 
-  if message.text:
-    callsign = message.text.strip().upper()
-    await process_callsign(update, context, callsign)
+  text = (message.text or "").strip()
+  if text:
+    await process_callsign(update, context, text.upper())
   else:
     await message.reply_text("Please provide a valid callsign.")
 
@@ -395,9 +406,9 @@ async def process_callsign(update: Update, context: CallbackContext, callsign: s
     LOG.error(err)
     return ConversationHandler.END
   except QRZ.SessionError as err:
-    await bot.send_message(chat_id=chat_id, text='QRZ Identification error')
-    LOG.error(err)
-    raise
+    await bot.send_message(chat_id=chat_id, text='Cannot connect on QRZ: Identification error')
+    LOG.error('QRZ connection error: %s', err)
+    return ConversationHandler.END
 
   text = await format_callinfo(username, callsign, call_info)
   try:

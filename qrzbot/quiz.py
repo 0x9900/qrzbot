@@ -287,7 +287,7 @@ async def quiz_status(update: Update, context: CallbackContext) -> None:
     await bot.send_message(chat_id=chat_id, text=f"Error checking quiz status: {str(err)}")
 
 
-async def set_commands(application):
+async def set_commands(application: Application) -> None:
   commands = [
     BotCommand('quiz', 'Send a new Ham quiz'),
     BotCommand('resetquiz', 'Start over'),
@@ -301,18 +301,23 @@ async def set_commands(application):
     logging.error("Error: %s", err)
 
 
-async def reset_confirmation(update: Update, _) -> int:
-  await update.message.reply_text("Are you sure? (yes/no)")
-  return CONFIRM
+async def reset_confirmation(update: Update, _: ContextTypes.DEFAULT_TYPE) -> int:
+  if update.message is not None:
+    await update.message.reply_text("Are you sure? (yes/no)")
+    return CONFIRM
+  else:
+    return ConversationHandler.END
 
 
 async def reset_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-  await reset_quiz(update, context)
+  if update.message is not None:
+    await reset_quiz(update, context)
   return ConversationHandler.END
 
 
 async def reset_denied(update: Update, _) -> int:
-  await update.message.reply_text("Cancelled.")
+  if update.message is not None:
+    await update.message.reply_text("Cancelled.")
   return ConversationHandler.END
 
 
@@ -333,6 +338,10 @@ def reset_handler():
 async def test(token) -> None:
   """Start the bot."""
   application = Application.builder().token(token).build()
+  if application is None:
+    logging.error('Error: cannot create the application')
+    return
+
   await set_commands(application)
 
   # Add command handlers
