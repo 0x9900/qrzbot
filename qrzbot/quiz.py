@@ -305,8 +305,7 @@ async def reset_confirmation(update: Update, _: ContextTypes.DEFAULT_TYPE) -> in
   if update.message is not None:
     await update.message.reply_text("Are you sure? (yes/no)")
     return CONFIRM
-  else:
-    return ConversationHandler.END
+  return ConversationHandler.END
 
 
 async def reset_confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
